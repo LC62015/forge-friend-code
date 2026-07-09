@@ -1,19 +1,33 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+  type KeyboardEvent,
+} from "react";
 import {
   Plus,
   Sparkles,
   ChevronDown,
   Image as ImageIcon,
-  Paperclip,
+  Film,
   Monitor,
   Settings,
   Send,
   SlidersHorizontal,
   Square,
+  X,
+  Loader2,
 } from "lucide-react";
+import {
+  fileToImageAttachment,
+  fileToVideoAttachment,
+  type Attachment,
+} from "@/lib/attachments";
 
 export const Route = createFileRoute("/")({
   component: LuaForge,
@@ -49,16 +63,20 @@ function LuaForge() {
     setHydrated(true);
   }, []);
 
-  if (!hydrated) {
-    return <div className="h-screen bg-background" />;
-  }
+  if (!hydrated) return <div className="h-screen bg-background" />;
   return <Chat initial={initialMessages} />;
 }
 
 function Chat({ initial }: { initial: UIMessage[] }) {
   const [input, setInput] = useState("");
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [attachError, setAttachError] = useState<string | null>(null);
+  const [processing, setProcessing] = useState(false);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
 
   const { messages, sendMessage, status, stop, setMessages } = useChat({
     messages: initial,
@@ -74,7 +92,10 @@ function Chat({ initial }: { initial: UIMessage[] }) {
   }, [messages]);
 
   useEffect(() => {
-    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+    scrollRef.current?.scrollTo({
+      top: scrollRef.current.scrollHeight,
+      behavior: "smooth",
+    });
   }, [messages, status]);
 
   useEffect(() => {
@@ -85,9 +106,39 @@ function Chat({ initial }: { initial: UIMessage[] }) {
 
   const submit = (text: string) => {
     const t = text.trim();
-    if (!t || isBusy) return;
-    sendMessage({ text: t });
+    if ((!t && attachments.length === 0) || isBusy) return;
+
+    // Build UIMessage parts: text + one file part per attachment.
+    // For videos we send the extracted preview frame as an image, plus a text
+    // note describing the source clip so the model has explicit context.
+    const parts: UIMessage["parts"] = [];
+    for (const a of attachments) {
+      if (a.kind === "video") {
+        parts.push({
+          type: "text",
+          text: `[Attached video: ${a.name} — ${a.durationSec}s. Preview frame follows.]`,
+        });
+        parts.push({
+          type: "file",
+          mediaType: "image/jpeg",
+          url: a.dataUrl,
+          filename: `${a.name}.frame.jpg`,
+        });
+      } else {
+        parts.push({
+          type: "file",
+          mediaType: a.mediaType,
+          url: a.dataUrl,
+          filename: a.name,
+        });
+      }
+    }
+    if (t) parts.push({ type: "text", text: t });
+
+    sendMessage({ role: "user", parts });
     setInput("");
+    setAttachments([]);
+    setAttachError(null);
   };
 
   const onSubmit = (e: FormEvent) => {
@@ -102,9 +153,46 @@ function Chat({ initial }: { initial: UIMessage[] }) {
     }
   };
 
+  const handleFiles = async (
+    files: FileList | null,
+    kind: "image" | "video",
+  ) => {
+    if (!files || files.length === 0) return;
+    setAttachError(null);
+    setProcessing(true);
+    try {
+      const next: Attachment[] = [];
+      for (const f of Array.from(files)) {
+        next.push(
+          kind === "image"
+            ? await fileToImageAttachment(f)
+            : await fileToVideoAttachment(f),
+        );
+      }
+      setAttachments((prev) => [...prev, ...next].slice(0, 6));
+    } catch (err) {
+      setAttachError(err instanceof Error ? err.message : "Could not attach file");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const onImagePick = (e: ChangeEvent<HTMLInputElement>) => {
+    void handleFiles(e.target.files, "image");
+    e.target.value = "";
+  };
+  const onVideoPick = (e: ChangeEvent<HTMLInputElement>) => {
+    void handleFiles(e.target.files, "video");
+    e.target.value = "";
+  };
+
+  const removeAttachment = (i: number) =>
+    setAttachments((prev) => prev.filter((_, idx) => idx !== i));
+
   const newChat = () => {
     setMessages([]);
     setInput("");
+    setAttachments([]);
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch {
@@ -182,6 +270,25 @@ function Chat({ initial }: { initial: UIMessage[] }) {
               <span className="ml-auto text-[10px] opacity-60">optional</span>
             </div>
 
+            {(attachments.length > 0 || attachError) && (
+              <div className="mb-2 space-y-2">
+                {attachments.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {attachments.map((a, i) => (
+                      <AttachmentChip
+                        key={i}
+                        attachment={a}
+                        onRemove={() => removeAttachment(i)}
+                      />
+                    ))}
+                  </div>
+                )}
+                {attachError && (
+                  <p className="text-xs text-destructive">{attachError}</p>
+                )}
+              </div>
+            )}
+
             <div className="rounded-2xl border border-border bg-card p-2 shadow-lg">
               <textarea
                 ref={textareaRef}
@@ -194,18 +301,46 @@ function Chat({ initial }: { initial: UIMessage[] }) {
                 autoFocus
               />
               <div className="flex items-center gap-1 px-1 pt-1">
-                <IconBtn title="Attach image">
+                <input
+                  ref={imageInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={onImagePick}
+                />
+                <input
+                  ref={videoInputRef}
+                  type="file"
+                  accept="video/*"
+                  multiple
+                  className="hidden"
+                  onChange={onVideoPick}
+                />
+                <IconBtn
+                  title="Attach image"
+                  onClick={() => imageInputRef.current?.click()}
+                >
                   <ImageIcon className="h-4 w-4" />
                 </IconBtn>
-                <IconBtn title="Attach file">
-                  <Paperclip className="h-4 w-4" />
+                <IconBtn
+                  title="Attach video"
+                  onClick={() => videoInputRef.current?.click()}
+                >
+                  <Film className="h-4 w-4" />
                 </IconBtn>
-                <IconBtn title="Record screen">
+                <IconBtn title="Record screen (coming soon)">
                   <Monitor className="h-4 w-4" />
                 </IconBtn>
                 <IconBtn title="Settings">
                   <Settings className="h-4 w-4" />
                 </IconBtn>
+                {processing && (
+                  <span className="ml-1 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                    <Loader2 className="h-3 w-3 animate-spin" />
+                    Processing…
+                  </span>
+                )}
                 {isBusy ? (
                   <button
                     type="button"
@@ -218,7 +353,7 @@ function Chat({ initial }: { initial: UIMessage[] }) {
                 ) : (
                   <button
                     type="submit"
-                    disabled={!input.trim()}
+                    disabled={!input.trim() && attachments.length === 0}
                     className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-foreground px-3 py-1.5 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <Send className="h-3.5 w-3.5" />
@@ -240,9 +375,11 @@ function EmptyState({ onPick }: { onPick: (t: string) => void }) {
   return (
     <div className="flex flex-col items-center py-20 text-center">
       <ForgeLogo className="h-14 w-14 text-primary" />
-      <h1 className="mt-3 text-2xl font-semibold">What Luau script are we building?</h1>
+      <h1 className="mt-3 text-2xl font-semibold">
+        What Luau script are we building?
+      </h1>
       <p className="mt-2 max-w-md text-sm text-muted-foreground">
-        Ask anything, paste a Roblox game link, drop an image, or record your screen.
+        Ask anything, paste a Roblox game link, or drop in a screenshot or short clip.
       </p>
       <div className="mt-8 grid w-full max-w-xl grid-cols-1 gap-2 sm:grid-cols-2">
         {SUGGESTIONS.map((s) => (
@@ -259,16 +396,70 @@ function EmptyState({ onPick }: { onPick: (t: string) => void }) {
   );
 }
 
+function AttachmentChip({
+  attachment,
+  onRemove,
+}: {
+  attachment: Attachment;
+  onRemove: () => void;
+}) {
+  return (
+    <div className="group relative overflow-hidden rounded-lg border border-border bg-card">
+      <img
+        src={attachment.dataUrl}
+        alt={attachment.name}
+        className="h-16 w-24 object-cover"
+      />
+      {attachment.kind === "video" && (
+        <div className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white">
+          <Film className="h-2.5 w-2.5" />
+          {attachment.durationSec}s
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={onRemove}
+        className="absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-full bg-black/70 text-white opacity-0 transition-opacity group-hover:opacity-100"
+        title="Remove"
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </div>
+  );
+}
+
 function MessageBubble({ message }: { message: UIMessage }) {
   const text = message.parts
     .map((p) => (p.type === "text" ? p.text : ""))
-    .join("");
+    .join("")
+    .trim();
+
+  const filePreviews = message.parts.filter(
+    (p): p is Extract<UIMessage["parts"][number], { type: "file" }> =>
+      p.type === "file",
+  );
 
   if (message.role === "user") {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-primary px-4 py-2.5 text-sm text-primary-foreground">
-          {text}
+        <div className="max-w-[85%] space-y-2">
+          {filePreviews.length > 0 && (
+            <div className="flex flex-wrap justify-end gap-2">
+              {filePreviews.map((p, i) => (
+                <img
+                  key={i}
+                  src={p.url}
+                  alt={p.filename ?? "attachment"}
+                  className="max-h-40 rounded-lg border border-border object-cover"
+                />
+              ))}
+            </div>
+          )}
+          {text && (
+            <div className="whitespace-pre-wrap rounded-2xl bg-primary px-4 py-2.5 text-sm text-primary-foreground">
+              {text}
+            </div>
+          )}
         </div>
       </div>
     );
@@ -302,7 +493,6 @@ function ThinkingBubble() {
 }
 
 function FormattedText({ text }: { text: string }) {
-  // Minimal renderer: split on triple-backtick code fences.
   const parts = text.split(/(```[\s\S]*?```)/g);
   return (
     <div className="space-y-3">
@@ -335,14 +525,17 @@ function FormattedText({ text }: { text: string }) {
 function IconBtn({
   children,
   title,
+  onClick,
 }: {
   children: React.ReactNode;
   title: string;
+  onClick?: () => void;
 }) {
   return (
     <button
       type="button"
       title={title}
+      onClick={onClick}
       className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
     >
       {children}

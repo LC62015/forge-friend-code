@@ -12,7 +12,10 @@ You help developers build games on Roblox using Luau. You:
 - Warn about common pitfalls (FilteringEnabled, exploiter surface, DataStore quotas)
 - Format code in \`\`\`lua fenced blocks
 
-When the user pastes a game link, image, or describes a system, produce runnable Luau code and setup instructions.`;
+When the user attaches an image, describe what you see (UI, error, screenshot) and produce Luau
+that fits. When the user attaches a video, they've sent you the first frame plus a text note with
+the filename and duration — use the frame as visual context and ask targeted follow-up questions
+about the parts of the clip you cannot see.`;
 
 type ChatRequestBody = { messages?: unknown };
 
@@ -37,6 +40,10 @@ export const Route = createFileRoute("/api/chat")({
 
         return result.toUIMessageStreamResponse({
           originalMessages: messages as UIMessage[],
+          onError: (error) => {
+            console.error("chat stream error", error);
+            return error instanceof Error ? error.message : "Model error";
+          },
         });
       },
     },
