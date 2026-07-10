@@ -230,6 +230,12 @@ function Chat({ initial }: { initial: UIMessage[] }) {
   const onImagePick = (e: ChangeEvent<HTMLInputElement>) => {
     void handleFiles(e.target.files, "image");
     e.target.value = "";
+  };
+  const onVideoPick = (e: ChangeEvent<HTMLInputElement>) => {
+    void handleFiles(e.target.files, "video");
+    e.target.value = "";
+  };
+
 
 
   const removeAttachment = (i: number) =>
