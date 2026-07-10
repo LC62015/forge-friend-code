@@ -287,7 +287,23 @@ function Chat({ initial }: { initial: UIMessage[] }) {
       </aside>
 
       {/* Main */}
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main
+        className="relative flex min-w-0 flex-1 flex-col"
+        onDragEnter={onDragEnter}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+      >
+        {isDragging && (
+          <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+            <div className="rounded-2xl border-2 border-dashed border-primary bg-card/60 px-8 py-6 text-center">
+              <ImageIcon className="mx-auto h-8 w-8 text-primary" />
+              <p className="mt-2 text-sm font-medium">Drop images or videos to attach</p>
+              <p className="text-xs text-muted-foreground">Up to 20 MB each · max 6 files</p>
+            </div>
+          </div>
+        )}
+
         <header className="flex h-12 items-center gap-2 border-b border-border px-4">
           <ForgeLogo className="h-5 w-5 text-primary" />
           <span className="font-semibold">LuaForge</span>
