@@ -180,14 +180,57 @@ function Chat({ initial }: { initial: UIMessage[] }) {
     }
   };
 
+  const handleDroppedFiles = async (files: File[]) => {
+    if (files.length === 0) return;
+    setAttachError(null);
+    setProcessing(true);
+    try {
+      const next: Attachment[] = [];
+      for (const f of files) {
+        if (f.type.startsWith("image/")) {
+          next.push(await fileToImageAttachment(f));
+        } else if (f.type.startsWith("video/")) {
+          next.push(await fileToVideoAttachment(f));
+        } else {
+          throw new Error(`${f.name} is not an image or video.`);
+        }
+      }
+      setAttachments((prev) => [...prev, ...next].slice(0, 6));
+    } catch (err) {
+      setAttachError(err instanceof Error ? err.message : "Could not attach file");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const onDragEnter = (e: React.DragEvent) => {
+    if (!Array.from(e.dataTransfer.types).includes("Files")) return;
+    e.preventDefault();
+    dragDepth.current += 1;
+    setIsDragging(true);
+  };
+  const onDragOver = (e: React.DragEvent) => {
+    if (!Array.from(e.dataTransfer.types).includes("Files")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  };
+  const onDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setIsDragging(false);
+  };
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragDepth.current = 0;
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files ?? []);
+    void handleDroppedFiles(files);
+  };
+
   const onImagePick = (e: ChangeEvent<HTMLInputElement>) => {
     void handleFiles(e.target.files, "image");
     e.target.value = "";
-  };
-  const onVideoPick = (e: ChangeEvent<HTMLInputElement>) => {
-    void handleFiles(e.target.files, "video");
-    e.target.value = "";
-  };
+
 
   const removeAttachment = (i: number) =>
     setAttachments((prev) => prev.filter((_, idx) => idx !== i));
