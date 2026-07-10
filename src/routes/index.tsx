@@ -72,6 +72,9 @@ function Chat({ initial }: { initial: UIMessage[] }) {
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [attachError, setAttachError] = useState<string | null>(null);
   const [processing, setProcessing] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragDepth = useRef(0);
+
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -177,6 +180,53 @@ function Chat({ initial }: { initial: UIMessage[] }) {
     }
   };
 
+  const handleDroppedFiles = async (files: File[]) => {
+    if (files.length === 0) return;
+    setAttachError(null);
+    setProcessing(true);
+    try {
+      const next: Attachment[] = [];
+      for (const f of files) {
+        if (f.type.startsWith("image/")) {
+          next.push(await fileToImageAttachment(f));
+        } else if (f.type.startsWith("video/")) {
+          next.push(await fileToVideoAttachment(f));
+        } else {
+          throw new Error(`${f.name} is not an image or video.`);
+        }
+      }
+      setAttachments((prev) => [...prev, ...next].slice(0, 6));
+    } catch (err) {
+      setAttachError(err instanceof Error ? err.message : "Could not attach file");
+    } finally {
+      setProcessing(false);
+    }
+  };
+
+  const onDragEnter = (e: React.DragEvent) => {
+    if (!Array.from(e.dataTransfer.types).includes("Files")) return;
+    e.preventDefault();
+    dragDepth.current += 1;
+    setIsDragging(true);
+  };
+  const onDragOver = (e: React.DragEvent) => {
+    if (!Array.from(e.dataTransfer.types).includes("Files")) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+  };
+  const onDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setIsDragging(false);
+  };
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    dragDepth.current = 0;
+    setIsDragging(false);
+    const files = Array.from(e.dataTransfer.files ?? []);
+    void handleDroppedFiles(files);
+  };
+
   const onImagePick = (e: ChangeEvent<HTMLInputElement>) => {
     void handleFiles(e.target.files, "image");
     e.target.value = "";
@@ -185,6 +235,8 @@ function Chat({ initial }: { initial: UIMessage[] }) {
     void handleFiles(e.target.files, "video");
     e.target.value = "";
   };
+
+
 
   const removeAttachment = (i: number) =>
     setAttachments((prev) => prev.filter((_, idx) => idx !== i));
@@ -235,7 +287,23 @@ function Chat({ initial }: { initial: UIMessage[] }) {
       </aside>
 
       {/* Main */}
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main
+        className="relative flex min-w-0 flex-1 flex-col"
+        onDragEnter={onDragEnter}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        onDrop={onDrop}
+      >
+        {isDragging && (
+          <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
+            <div className="rounded-2xl border-2 border-dashed border-primary bg-card/60 px-8 py-6 text-center">
+              <ImageIcon className="mx-auto h-8 w-8 text-primary" />
+              <p className="mt-2 text-sm font-medium">Drop images or videos to attach</p>
+              <p className="text-xs text-muted-foreground">Up to 20 MB each · max 6 files</p>
+            </div>
+          </div>
+        )}
+
         <header className="flex h-12 items-center gap-2 border-b border-border px-4">
           <ForgeLogo className="h-5 w-5 text-primary" />
           <span className="font-semibold">LuaForge</span>
