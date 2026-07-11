@@ -11,8 +11,6 @@ import {
 } from "react";
 import {
   Plus,
-  Sparkles,
-  ChevronDown,
   Image as ImageIcon,
   Film,
   Monitor,
@@ -308,11 +306,6 @@ function Chat({ initial }: { initial: UIMessage[] }) {
           <ForgeLogo className="h-5 w-5 text-primary" />
           <span className="font-semibold">LuaForge</span>
           <span className="text-xs text-muted-foreground">Roblox Luau AI</span>
-          <button className="ml-auto flex items-center gap-1.5 rounded-lg border border-border bg-card/40 px-2.5 py-1 text-xs text-foreground/80 transition-colors hover:bg-accent">
-            <Sparkles className="h-3.5 w-3.5" />
-            Gemini
-            <ChevronDown className="h-3 w-3" />
-          </button>
         </header>
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto">
