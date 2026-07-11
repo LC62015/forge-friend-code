@@ -331,6 +331,7 @@ function renderMarkdown(text){
       const code = m ? m[2] : p.replace(/```/g,"");
       return `<pre><div class="lang">${escapeHTML(lang)}</div><code>${escapeHTML(code)}</code></pre>`;
     }
+    if(!p) return "";
     return `<p>${escapeHTML(p).replace(/\n/g,"<br>")}</p>`;
   }).join("");
 }
