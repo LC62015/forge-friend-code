@@ -11,8 +11,6 @@ import {
 } from "react";
 import {
   Plus,
-  Sparkles,
-  ChevronDown,
   Image as ImageIcon,
   Film,
   Monitor,
