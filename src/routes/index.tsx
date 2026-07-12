@@ -14,7 +14,6 @@ import {
   Image as ImageIcon,
   Film,
   Monitor,
-  Settings,
   Send,
   SlidersHorizontal,
   Square,
