@@ -14,7 +14,6 @@ import {
   Image as ImageIcon,
   Film,
   Monitor,
-  Settings,
   Send,
   SlidersHorizontal,
   Square,
@@ -28,10 +27,12 @@ import {
 } from "@/lib/attachments";
 
 export const Route = createFileRoute("/")({
-  component: LuaForge,
+  component: Gate,
 });
 
 const STORAGE_KEY = "luaforge.messages.v1";
+const VAULT_KEY = "proxyvault.unlocked.v1";
+const VAULT_PASSWORD = "ProxyHub";
 
 const SUGGESTIONS = [
   "Make a teleport script for a lobby",
@@ -46,6 +47,108 @@ const RECENT_STUB = [
   "Leaderstats with saving",
   "Wave-based zombie survival",
 ];
+
+function Gate() {
+  const [hydrated, setHydrated] = useState(false);
+  const [unlocked, setUnlocked] = useState(false);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    try {
+      if (sessionStorage.getItem(VAULT_KEY) === "1") setUnlocked(true);
+    } catch {
+      /* ignore */
+    }
+    setHydrated(true);
+  }, []);
+
+  if (!hydrated) return <div className="h-screen bg-background" />;
+  if (unlocked) return <LuaForge />;
+
+  const tryUnlock = () => {
+    if (password === VAULT_PASSWORD) {
+      try {
+        sessionStorage.setItem(VAULT_KEY, "1");
+      } catch {
+        /* ignore */
+      }
+      setUnlocked(true);
+    } else {
+      setError("❌ Incorrect password.");
+    }
+  };
+
+  return (
+    <div
+      style={{
+        background: "#0b0f17",
+        color: "white",
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        fontFamily: "Arial, Helvetica, sans-serif",
+      }}
+    >
+      <div
+        style={{
+          width: 420,
+          maxWidth: "calc(100vw - 32px)",
+          background: "#161b22",
+          border: "1px solid #30363d",
+          borderRadius: 15,
+          padding: 30,
+          textAlign: "center",
+          boxShadow: "0 0 30px rgba(0,255,255,.15)",
+        }}
+      >
+        <h1 style={{ marginBottom: 20, color: "#00eaff" }}>🔒 Proxy Vault</h1>
+        <p>Enter the access key.</p>
+        <input
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") tryUnlock();
+          }}
+          autoFocus
+          style={{
+            width: "100%",
+            padding: 12,
+            margin: "15px 0",
+            border: "none",
+            borderRadius: 8,
+            background: "#21262d",
+            color: "white",
+            fontSize: 16,
+          }}
+        />
+        <button
+          onClick={tryUnlock}
+          style={{
+            width: "100%",
+            padding: 12,
+            border: "none",
+            borderRadius: 8,
+            background: "#00bcd4",
+            color: "white",
+            cursor: "pointer",
+            fontSize: 16,
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "#0097a7")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "#00bcd4")}
+        >
+          Unlock
+        </button>
+        {error && (
+          <div style={{ color: "#ff5c5c", marginTop: 15 }}>{error}</div>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function LuaForge() {
   const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
@@ -392,9 +495,6 @@ function Chat({ initial }: { initial: UIMessage[] }) {
                 </IconBtn>
                 <IconBtn title="Record screen (coming soon)">
                   <Monitor className="h-4 w-4" />
-                </IconBtn>
-                <IconBtn title="Settings">
-                  <Settings className="h-4 w-4" />
                 </IconBtn>
                 {processing && (
                   <span className="ml-1 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
