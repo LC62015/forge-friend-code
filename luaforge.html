@@ -451,7 +451,7 @@ function renderMessages(){
 async function send(){
   const text = $("input").value.trim();
   if((!text && attachments.length === 0) || streaming) return;
-  if(!cfg.key){ requestSettings(); showErr("Add an API key in Settings first."); return; }
+  if(!cfg.key){ openSettings(); showErr("Add an API key in Settings first."); return; }
   hideErr();
 
   const userMsg = { role:"user", text, attachments: attachments.slice() };
