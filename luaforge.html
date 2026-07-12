@@ -174,6 +174,23 @@
   </div>
 </div>
 
+<!-- Vault modal -->
+<div class="modal" id="vaultModal">
+  <div class="panel">
+    <h2>🔒 Vault</h2>
+    <p>Enter the vault password to access Settings.</p>
+    <div class="field">
+      <label>Password</label>
+      <input id="vaultPass" type="password" placeholder="••••••••" />
+    </div>
+    <div id="vaultErr" class="err" style="display:none">Wrong password</div>
+    <div class="actions">
+      <button class="btn-ghost" id="vaultCancel">Cancel</button>
+      <button class="btn-primary" id="vaultUnlock">Unlock</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const STORAGE_MSGS = "luaforge.html.messages.v1";
 const STORAGE_CFG  = "luaforge.html.config.v1";
@@ -206,6 +223,35 @@ function loadMsgs(){
 }
 function saveMsgs(){ localStorage.setItem(STORAGE_MSGS, JSON.stringify(messages)); }
 
+/* ---------- Vault ---------- */
+const VAULT_PASSWORD = "ProxyHub";
+let vaultUnlocked = false;
+
+function openVault(){
+  $("vaultPass").value = "";
+  $("vaultErr").style.display = "none";
+  $("vaultModal").classList.add("on");
+  setTimeout(()=>$("vaultPass").focus(), 50);
+}
+function closeVault(){ $("vaultModal").classList.remove("on"); }
+function tryUnlock(){
+  if($("vaultPass").value === VAULT_PASSWORD){
+    vaultUnlocked = true;
+    closeVault();
+    openSettings();
+  } else {
+    $("vaultErr").style.display = "block";
+  }
+}
+$("vaultCancel").onclick = closeVault;
+$("vaultUnlock").onclick = tryUnlock;
+$("vaultPass").addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); tryUnlock(); } });
+
+function requestSettings(){
+  if(vaultUnlocked) openSettings();
+  else openVault();
+}
+
 /* ---------- Settings modal ---------- */
 function openSettings(){
   $("cfgUrl").value = cfg.url;
@@ -215,8 +261,8 @@ function openSettings(){
   $("settingsModal").classList.add("on");
 }
 function closeSettings(){ $("settingsModal").classList.remove("on"); }
-$("settingsBtn").onclick = openSettings;
-$("settingsBtn2").onclick = openSettings;
+$("settingsBtn").onclick = requestSettings;
+$("settingsBtn2").onclick = requestSettings;
 $("cfgCancel").onclick = closeSettings;
 $("cfgSave").onclick = () => {
   cfg.url = $("cfgUrl").value.trim().replace(/\/+$/,"") || defaults.url;
@@ -401,7 +447,7 @@ function renderMessages(){
 async function send(){
   const text = $("input").value.trim();
   if((!text && attachments.length === 0) || streaming) return;
-  if(!cfg.key){ openSettings(); showErr("Add an API key in Settings first."); return; }
+  if(!cfg.key){ requestSettings(); showErr("Add an API key in Settings first."); return; }
   hideErr();
 
   const userMsg = { role:"user", text, attachments: attachments.slice() };
