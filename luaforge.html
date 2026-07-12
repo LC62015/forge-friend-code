@@ -243,33 +243,32 @@ function loadMsgs(){
 }
 function saveMsgs(){ localStorage.setItem(STORAGE_MSGS, JSON.stringify(messages)); }
 
-/* ---------- Vault ---------- */
+/* ---------- Site Vault Gate ---------- */
 const VAULT_PASSWORD = "ProxyHub";
-let vaultUnlocked = false;
+const VAULT_KEY = "luaforge.html.vault.v1";
 
-function openVault(){
-  $("vaultPass").value = "";
-  $("vaultErr").style.display = "none";
-  $("vaultModal").classList.add("on");
-  setTimeout(()=>$("vaultPass").focus(), 50);
+function unlockSite(){
+  document.body.classList.remove("locked");
+  const g = document.getElementById("siteGate");
+  if(g) g.remove();
 }
-function closeVault(){ $("vaultModal").classList.remove("on"); }
-function tryUnlock(){
-  if($("vaultPass").value === VAULT_PASSWORD){
-    vaultUnlocked = true;
-    closeVault();
-    openSettings();
+function tryGate(){
+  const v = document.getElementById("gatePass").value;
+  if(v === VAULT_PASSWORD){
+    try{ sessionStorage.setItem(VAULT_KEY, "1"); }catch{}
+    unlockSite();
   } else {
-    $("vaultErr").style.display = "block";
+    document.getElementById("gateErr").textContent = "Wrong password";
   }
 }
-$("vaultCancel").onclick = closeVault;
-$("vaultUnlock").onclick = tryUnlock;
-$("vaultPass").addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); tryUnlock(); } });
-
-function requestSettings(){
-  if(vaultUnlocked) openSettings();
-  else openVault();
+if(sessionStorage.getItem(VAULT_KEY) === "1"){
+  unlockSite();
+} else {
+  document.getElementById("gateBtn").onclick = tryGate;
+  document.getElementById("gatePass").addEventListener("keydown", e => {
+    if(e.key === "Enter"){ e.preventDefault(); tryGate(); }
+  });
+  setTimeout(()=>document.getElementById("gatePass")?.focus(), 50);
 }
 
 /* ---------- Settings modal ---------- */
@@ -281,8 +280,8 @@ function openSettings(){
   $("settingsModal").classList.add("on");
 }
 function closeSettings(){ $("settingsModal").classList.remove("on"); }
-$("settingsBtn").onclick = requestSettings;
-$("settingsBtn2").onclick = requestSettings;
+$("settingsBtn").onclick = openSettings;
+$("settingsBtn2").onclick = openSettings;
 $("cfgCancel").onclick = closeSettings;
 $("cfgSave").onclick = () => {
   cfg.url = $("cfgUrl").value.trim().replace(/\/+$/,"") || defaults.url;
