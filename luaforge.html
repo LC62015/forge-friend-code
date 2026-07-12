@@ -223,6 +223,35 @@ function loadMsgs(){
 }
 function saveMsgs(){ localStorage.setItem(STORAGE_MSGS, JSON.stringify(messages)); }
 
+/* ---------- Vault ---------- */
+const VAULT_PASSWORD = "ProxyHub";
+let vaultUnlocked = false;
+
+function openVault(){
+  $("vaultPass").value = "";
+  $("vaultErr").style.display = "none";
+  $("vaultModal").classList.add("on");
+  setTimeout(()=>$("vaultPass").focus(), 50);
+}
+function closeVault(){ $("vaultModal").classList.remove("on"); }
+function tryUnlock(){
+  if($("vaultPass").value === VAULT_PASSWORD){
+    vaultUnlocked = true;
+    closeVault();
+    openSettings();
+  } else {
+    $("vaultErr").style.display = "block";
+  }
+}
+$("vaultCancel").onclick = closeVault;
+$("vaultUnlock").onclick = tryUnlock;
+$("vaultPass").addEventListener("keydown", e => { if(e.key === "Enter"){ e.preventDefault(); tryUnlock(); } });
+
+function requestSettings(){
+  if(vaultUnlocked) openSettings();
+  else openVault();
+}
+
 /* ---------- Settings modal ---------- */
 function openSettings(){
   $("cfgUrl").value = cfg.url;
@@ -232,8 +261,8 @@ function openSettings(){
   $("settingsModal").classList.add("on");
 }
 function closeSettings(){ $("settingsModal").classList.remove("on"); }
-$("settingsBtn").onclick = openSettings;
-$("settingsBtn2").onclick = openSettings;
+$("settingsBtn").onclick = requestSettings;
+$("settingsBtn2").onclick = requestSettings;
 $("cfgCancel").onclick = closeSettings;
 $("cfgSave").onclick = () => {
   cfg.url = $("cfgUrl").value.trim().replace(/\/+$/,"") || defaults.url;
