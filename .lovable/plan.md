@@ -1,10 +1,20 @@
+## Goal
+Replace the current home page with a "Proxy Vault" password gate. Users see a lock screen; entering `ProxyHub` reveals the chat UI. Remove the Settings button from the header.
+
 ## Changes
 
-**1. `src/routes/index.tsx`** — Remove the "Gemini ▾" button in the header (the `<button>` with `Sparkles` + "Gemini" + `ChevronDown` at the top right of the main area). Drop the now-unused `Sparkles` and `ChevronDown` imports from `lucide-react`.
+### `src/routes/index.tsx`
+- Replace the rendered page with a two-state screen:
+  - **Locked (default):** centered card matching the provided design — dark `#0b0f17` background, `#161b22` card, cyan `#00eaff` heading "🔒 Proxy Vault", password input, "Unlock" button, error text on wrong password, Enter key submits.
+  - **Unlocked:** the existing chat UI (composer, attachments, drag-drop, messages) exactly as it is today.
+- State managed with a single `useState<boolean>` (`unlocked`). Password compared to the literal `"ProxyHub"`.
+- Persist unlock in `sessionStorage` so a refresh during the session stays unlocked (page reload still requires re-entry after closing the tab).
+- **Remove** the "⚙ Settings" button in the top header. Leave everything else (attachments, model logic, send flow) untouched.
 
-**2. `luaforge.html`** — Verify the standalone file works end-to-end after the earlier Gemini/model button removal:
-- Ensure no leftover references to `modelBtn` / `updateModelLabel` remain that would throw at load.
-- Confirm the Settings modal still lets the user set API base URL, key, and model, and that send/stream still works against an OpenAI-compatible endpoint.
-- Fix any dangling handlers or selectors so opening the file in a browser and configuring an API key produces a working chat.
+### Not changing
+- No backend, routing, styling system, or attachment/chat logic changes.
+- `luaforge.html` standalone file is untouched.
 
-No other files touched. No backend, styling, or attachment logic changes.
+## Technical notes
+- Client-side only gate — this is a UX lock, not real security. Anyone reading the JS bundle can see the password. That matches the snippet you provided.
+- Styling done inline / with a small style block scoped to the gate so it doesn't affect the rest of the app's Tailwind classes.
