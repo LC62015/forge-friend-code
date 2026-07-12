@@ -83,6 +83,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:description", content: "AI assistant that writes Roblox Luau scripts, systems, and modules for your games." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:title", content: "LuaForge — Roblox Luau AI" },
+      { name: "twitter:description", content: "AI assistant that writes Roblox Luau scripts, systems, and modules for your games." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/4a3e002c-19ba-4426-a368-8ba07fbcf120/id-preview-e7d9189f--507eacf4-2017-40dc-99df-489e17fd55cc.lovable.app-1783841780348.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/4a3e002c-19ba-4426-a368-8ba07fbcf120/id-preview-e7d9189f--507eacf4-2017-40dc-99df-489e17fd55cc.lovable.app-1783841780348.png" },
     ],
     links: [
       {
