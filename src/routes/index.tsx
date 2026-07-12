@@ -392,9 +392,6 @@ function Chat({ initial }: { initial: UIMessage[] }) {
                 <IconBtn title="Record screen (coming soon)">
                   <Monitor className="h-4 w-4" />
                 </IconBtn>
-                <IconBtn title="Settings">
-                  <Settings className="h-4 w-4" />
-                </IconBtn>
                 {processing && (
                   <span className="ml-1 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
                     <Loader2 className="h-3 w-3 animate-spin" />
