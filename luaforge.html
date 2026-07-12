@@ -91,9 +91,29 @@
   .btn-ghost{padding:8px 14px;border-radius:8px;font-size:13px;color:var(--muted)}
   .btn-ghost:hover{color:var(--text)}
   @media(max-width:768px){aside{display:none}}
+  .gate{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:200;padding:16px}
+  .gate .panel{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:28px;max-width:380px;width:100%;text-align:center}
+  .gate .logo{font-size:40px;color:var(--accent);margin-bottom:8px}
+  .gate h1{margin:0 0 4px;font-size:20px}
+  .gate p{margin:0 0 18px;font-size:13px;color:var(--muted)}
+  .gate input{width:100%;background:#1a1a1a;border:1px solid var(--border);border-radius:8px;padding:10px 12px;color:var(--text);font-size:14px;outline:none;margin-bottom:10px}
+  .gate input:focus{border-color:var(--accent)}
+  .gate button{width:100%;background:var(--accent);color:#062018;padding:10px 14px;border-radius:8px;font-size:14px;font-weight:600}
+  .gate .gerr{color:#f87171;font-size:12px;margin-bottom:10px;min-height:16px}
+  body.locked{overflow:hidden}
 </style>
 </head>
-<body>
+<body class="locked">
+<div class="gate" id="siteGate">
+  <div class="panel">
+    <div class="logo">🔒</div>
+    <h1>LuaForge Vault</h1>
+    <p>Enter the password to access this site.</p>
+    <input id="gatePass" type="password" placeholder="Password" autocomplete="off" />
+    <div class="gerr" id="gateErr"></div>
+    <button id="gateBtn">Unlock</button>
+  </div>
+</div>
 <div class="app">
   <aside>
     <button class="new-chat" id="newChatBtn">＋ New chat</button>
