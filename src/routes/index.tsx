@@ -578,11 +578,12 @@ function Chat({ initial }: { initial: UIMessage[] }) {
                 ) : (
                   <button
                     type="submit"
-                    disabled={!input.trim() && attachments.length === 0}
+                    disabled={(!input.trim() && attachments.length === 0) || overLimit}
                     className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-foreground px-3 py-1.5 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <Send className="h-3.5 w-3.5" />
                   </button>
+
                 )}
               </div>
             </div>
