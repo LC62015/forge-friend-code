@@ -19,6 +19,7 @@ import {
   Square,
   X,
   Loader2,
+  Play,
 } from "lucide-react";
 import {
   fileToImageAttachment,
@@ -661,16 +662,9 @@ function FormattedText({ text }: { text: string }) {
         if (part.startsWith("```")) {
           const inner = part.replace(/^```(\w+)?\n?/, "").replace(/```$/, "");
           const lang = /^```(\w+)/.exec(part)?.[1] ?? "lua";
+          const isLua = /^(lua|luau)$/i.test(lang);
           return (
-            <pre
-              key={i}
-              className="overflow-x-auto rounded-lg border border-border bg-black/40 p-3 text-[12.5px] leading-relaxed"
-            >
-              <div className="mb-2 text-[10px] uppercase tracking-wider text-muted-foreground">
-                {lang}
-              </div>
-              <code className="font-mono text-foreground/90">{inner}</code>
-            </pre>
+            <CodeBlock key={i} code={inner} lang={lang} runnable={isLua} />
           );
         }
         return (
@@ -679,6 +673,109 @@ function FormattedText({ text }: { text: string }) {
           </p>
         );
       })}
+    </div>
+  );
+}
+
+function CodeBlock({
+  code,
+  lang,
+  runnable,
+}: {
+  code: string;
+  lang: string;
+  runnable: boolean;
+}) {
+  const [output, setOutput] = useState<string | null>(null);
+  const [running, setRunning] = useState(false);
+  const [ok, setOk] = useState(true);
+
+  const run = async () => {
+    setRunning(true);
+    setOutput(null);
+    try {
+      const fengari = await import("fengari-web");
+      const { lua, lauxlib, lualib, to_luastring, to_jsstring } = fengari as any;
+      const L = lauxlib.luaL_newstate();
+      lualib.luaL_openlibs(L);
+
+      const buf: string[] = [];
+      // Override print
+      lua.lua_pushcfunction(L, (LL: any) => {
+        const n = lua.lua_gettop(LL);
+        const line: string[] = [];
+        for (let i = 1; i <= n; i++) {
+          const s = lauxlib.luaL_tolstring(LL, i);
+          line.push(to_jsstring(s));
+          lua.lua_pop(LL, 1);
+        }
+        buf.push(line.join("\t"));
+        return 0;
+      });
+      lua.lua_setglobal(L, to_luastring("print"));
+
+      // Stub game/workspace/wait so simple Roblox snippets don't error immediately
+      const stub = `
+        wait = wait or function(t) return t or 0 end
+        task = task or { wait = function(t) return t or 0 end, spawn = function(f, ...) return f(...) end, delay = function(_, f, ...) return f(...) end }
+        Instance = Instance or { new = function(cls) return { ClassName = cls, Name = cls } end }
+      `;
+      lauxlib.luaL_dostring(L, to_luastring(stub));
+
+      const status = lauxlib.luaL_dostring(L, to_luastring(code));
+      if (status !== 0) {
+        const err = to_jsstring(lua.lua_tostring(L, -1));
+        setOk(false);
+        setOutput(err || "Lua error");
+      } else {
+        setOk(true);
+        setOutput(buf.length ? buf.join("\n") : "(no output)");
+      }
+    } catch (e) {
+      setOk(false);
+      setOutput(e instanceof Error ? e.message : String(e));
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-black/40">
+      <div className="flex items-center justify-between border-b border-border/50 px-3 py-1.5">
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+          {lang}
+        </span>
+        {runnable && (
+          <button
+            type="button"
+            onClick={run}
+            disabled={running}
+            className="inline-flex items-center gap-1 rounded-md bg-primary/90 px-2 py-0.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+          >
+            {running ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <Play className="h-3 w-3" />
+            )}
+            {running ? "Running…" : "Test"}
+          </button>
+        )}
+      </div>
+      <pre className="overflow-x-auto p-3 text-[12.5px] leading-relaxed">
+        <code className="font-mono text-foreground/90">{code}</code>
+      </pre>
+      {output !== null && (
+        <div
+          className={`border-t border-border/50 px-3 py-2 text-[12px] ${
+            ok ? "text-emerald-300" : "text-red-300"
+          }`}
+        >
+          <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+            {ok ? "Output" : "Error"}
+          </div>
+          <pre className="whitespace-pre-wrap font-mono">{output}</pre>
+        </div>
+      )}
     </div>
   );
 }
