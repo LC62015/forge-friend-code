@@ -209,9 +209,16 @@ function Chat({ initial }: { initial: UIMessage[] }) {
 
   const isBusy = status === "submitted" || status === "streaming";
 
+  const charCount = input.length;
+  const wordCount = input.trim() ? input.trim().split(/\s+/).length : 0;
+  const overLimit = charCount > MAX_INPUT_CHARS;
+  const willChunk = charCount > CHUNK_CHARS;
+  const chunkCount = willChunk ? Math.ceil(charCount / CHUNK_CHARS) : 1;
+
   const submit = (text: string) => {
     const t = text.trim();
     if ((!t && attachments.length === 0) || isBusy) return;
+    if (t.length > MAX_INPUT_CHARS) return;
 
     // Build UIMessage parts: text + one file part per attachment.
     // For videos we send the extracted preview frame as an image, plus a text
@@ -238,13 +245,30 @@ function Chat({ initial }: { initial: UIMessage[] }) {
         });
       }
     }
-    if (t) parts.push({ type: "text", text: t });
+    if (t) {
+      // Chunk very long text into multiple sequential text parts so nothing
+      // is truncated in transit. The server merges consecutive text parts
+      // back into a single message before sending to the model.
+      const chunks = chunkText(t, CHUNK_CHARS);
+      if (chunks.length === 1) {
+        parts.push({ type: "text", text: chunks[0] });
+      } else {
+        const total = chunks.length;
+        chunks.forEach((c, i) => {
+          parts.push({
+            type: "text",
+            text: `[chunk ${i + 1}/${total}]\n${c}`,
+          });
+        });
+      }
+    }
 
     sendMessage({ role: "user", parts });
     setInput("");
     setAttachments([]);
     setAttachError(null);
   };
+
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
