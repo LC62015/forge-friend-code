@@ -28,6 +28,30 @@ export const Route = createFileRoute("/api/chat")({
           return new Response("Messages are required", { status: 400 });
         }
 
+        // Reconstruct chunked messages: merge consecutive text parts into one
+        // and strip any [chunk N/M] markers the client added for transport.
+        const merged = (messages as UIMessage[]).map((m) => {
+          const out: UIMessage["parts"] = [];
+          let buf = "";
+          const flush = () => {
+            if (buf) {
+              out.push({ type: "text", text: buf });
+              buf = "";
+            }
+          };
+          for (const p of m.parts) {
+            if (p.type === "text") {
+              const cleaned = p.text.replace(/^\[chunk \d+\/\d+\]\n?/, "");
+              buf += (buf ? "" : "") + cleaned;
+            } else {
+              flush();
+              out.push(p);
+            }
+          }
+          flush();
+          return { ...m, parts: out };
+        });
+
         const key = process.env.LOVABLE_API_KEY;
         if (!key) return new Response("Missing LOVABLE_API_KEY", { status: 500 });
 
@@ -35,8 +59,9 @@ export const Route = createFileRoute("/api/chat")({
         const result = streamText({
           model: gateway("google/gemini-3-flash-preview"),
           system: SYSTEM_PROMPT,
-          messages: await convertToModelMessages(messages as UIMessage[]),
+          messages: await convertToModelMessages(merged),
         });
+
 
         return result.toUIMessageStreamResponse({
           originalMessages: messages as UIMessage[],

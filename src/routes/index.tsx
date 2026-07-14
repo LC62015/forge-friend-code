@@ -32,6 +32,29 @@ export const Route = createFileRoute("/")({
 });
 
 const STORAGE_KEY = "luaforge.messages.v1";
+const MAX_INPUT_CHARS = 2_000_000; // ~2M chars per message
+const CHUNK_CHARS = 24_000; // split into ~24k-char parts for transport
+
+function chunkText(text: string, size: number): string[] {
+  if (text.length <= size) return [text];
+  const chunks: string[] = [];
+  let i = 0;
+  while (i < text.length) {
+    let end = Math.min(i + size, text.length);
+    if (end < text.length) {
+      // Prefer breaking on whitespace within the last 500 chars of the window
+      const slice = text.slice(i, end);
+      const nl = slice.lastIndexOf("\n");
+      const sp = slice.lastIndexOf(" ");
+      const brk = Math.max(nl, sp);
+      if (brk > size - 500) end = i + brk + 1;
+    }
+    chunks.push(text.slice(i, end));
+    i = end;
+  }
+  return chunks;
+}
+
 const VAULT_KEY = "proxyvault.unlocked.v1";
 const VAULT_PASSWORD = "ProxyHub";
 
@@ -209,9 +232,16 @@ function Chat({ initial }: { initial: UIMessage[] }) {
 
   const isBusy = status === "submitted" || status === "streaming";
 
+  const charCount = input.length;
+  const wordCount = input.trim() ? input.trim().split(/\s+/).length : 0;
+  const overLimit = charCount > MAX_INPUT_CHARS;
+  const willChunk = charCount > CHUNK_CHARS;
+  const chunkCount = willChunk ? Math.ceil(charCount / CHUNK_CHARS) : 1;
+
   const submit = (text: string) => {
     const t = text.trim();
     if ((!t && attachments.length === 0) || isBusy) return;
+    if (t.length > MAX_INPUT_CHARS) return;
 
     // Build UIMessage parts: text + one file part per attachment.
     // For videos we send the extracted preview frame as an image, plus a text
@@ -238,13 +268,30 @@ function Chat({ initial }: { initial: UIMessage[] }) {
         });
       }
     }
-    if (t) parts.push({ type: "text", text: t });
+    if (t) {
+      // Chunk very long text into multiple sequential text parts so nothing
+      // is truncated in transit. The server merges consecutive text parts
+      // back into a single message before sending to the model.
+      const chunks = chunkText(t, CHUNK_CHARS);
+      if (chunks.length === 1) {
+        parts.push({ type: "text", text: chunks[0] });
+      } else {
+        const total = chunks.length;
+        chunks.forEach((c, i) => {
+          parts.push({
+            type: "text",
+            text: `[chunk ${i + 1}/${total}]\n${c}`,
+          });
+        });
+      }
+    }
 
     sendMessage({ role: "user", parts });
     setInput("");
     setAttachments([]);
     setAttachError(null);
   };
+
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -461,10 +508,26 @@ function Chat({ initial }: { initial: UIMessage[] }) {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={onKey}
                 placeholder="Message LuaForge… (Enter to send, Shift+Enter for newline)"
-                rows={2}
-                className="w-full resize-none bg-transparent px-2 py-2 text-sm outline-none placeholder:text-muted-foreground"
+                rows={4}
+                maxLength={MAX_INPUT_CHARS}
+                className="max-h-[60vh] min-h-[80px] w-full resize-y bg-transparent px-2 py-2 text-sm outline-none placeholder:text-muted-foreground"
                 autoFocus
               />
+              <div className="flex items-center justify-between px-2 pb-1 text-[11px] text-muted-foreground">
+                <span>
+                  {wordCount.toLocaleString()} words ·{" "}
+                  <span className={overLimit ? "text-destructive font-medium" : ""}>
+                    {charCount.toLocaleString()}
+                  </span>{" "}
+                  / {MAX_INPUT_CHARS.toLocaleString()} chars
+                </span>
+                <span>
+                  {willChunk
+                    ? `Will send in ${chunkCount} chunks (~${CHUNK_CHARS.toLocaleString()} each)`
+                    : `Chunks at ${CHUNK_CHARS.toLocaleString()} chars`}
+                </span>
+              </div>
+
               <div className="flex items-center gap-1 px-1 pt-1">
                 <input
                   ref={imageInputRef}
@@ -515,11 +578,12 @@ function Chat({ initial }: { initial: UIMessage[] }) {
                 ) : (
                   <button
                     type="submit"
-                    disabled={!input.trim() && attachments.length === 0}
+                    disabled={(!input.trim() && attachments.length === 0) || overLimit}
                     className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-foreground px-3 py-1.5 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <Send className="h-3.5 w-3.5" />
                   </button>
+
                 )}
               </div>
             </div>
