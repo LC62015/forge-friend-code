@@ -32,6 +32,29 @@ export const Route = createFileRoute("/")({
 });
 
 const STORAGE_KEY = "luaforge.messages.v1";
+const MAX_INPUT_CHARS = 2_000_000; // ~2M chars per message
+const CHUNK_CHARS = 24_000; // split into ~24k-char parts for transport
+
+function chunkText(text: string, size: number): string[] {
+  if (text.length <= size) return [text];
+  const chunks: string[] = [];
+  let i = 0;
+  while (i < text.length) {
+    let end = Math.min(i + size, text.length);
+    if (end < text.length) {
+      // Prefer breaking on whitespace within the last 500 chars of the window
+      const slice = text.slice(i, end);
+      const nl = slice.lastIndexOf("\n");
+      const sp = slice.lastIndexOf(" ");
+      const brk = Math.max(nl, sp);
+      if (brk > size - 500) end = i + brk + 1;
+    }
+    chunks.push(text.slice(i, end));
+    i = end;
+  }
+  return chunks;
+}
+
 const VAULT_KEY = "proxyvault.unlocked.v1";
 const VAULT_PASSWORD = "ProxyHub";
 
