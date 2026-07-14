@@ -508,10 +508,26 @@ function Chat({ initial }: { initial: UIMessage[] }) {
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={onKey}
                 placeholder="Message LuaForge… (Enter to send, Shift+Enter for newline)"
-                rows={2}
-                className="w-full resize-none bg-transparent px-2 py-2 text-sm outline-none placeholder:text-muted-foreground"
+                rows={4}
+                maxLength={MAX_INPUT_CHARS}
+                className="max-h-[60vh] min-h-[80px] w-full resize-y bg-transparent px-2 py-2 text-sm outline-none placeholder:text-muted-foreground"
                 autoFocus
               />
+              <div className="flex items-center justify-between px-2 pb-1 text-[11px] text-muted-foreground">
+                <span>
+                  {wordCount.toLocaleString()} words ·{" "}
+                  <span className={overLimit ? "text-destructive font-medium" : ""}>
+                    {charCount.toLocaleString()}
+                  </span>{" "}
+                  / {MAX_INPUT_CHARS.toLocaleString()} chars
+                </span>
+                <span>
+                  {willChunk
+                    ? `Will send in ${chunkCount} chunks (~${CHUNK_CHARS.toLocaleString()} each)`
+                    : `Chunks at ${CHUNK_CHARS.toLocaleString()} chars`}
+                </span>
+              </div>
+
               <div className="flex items-center gap-1 px-1 pt-1">
                 <input
                   ref={imageInputRef}
