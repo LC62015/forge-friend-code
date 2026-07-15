@@ -3,6 +3,7 @@ import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ChangeEvent,
@@ -20,20 +21,29 @@ import {
   X,
   Loader2,
   Play,
+  Search,
+  Gamepad2,
+  ChevronDown,
 } from "lucide-react";
 import {
   fileToImageAttachment,
   fileToVideoAttachment,
   type Attachment,
 } from "@/lib/attachments";
+import { GAMES, findGame, type GameContext, type GameDefinition } from "@/lib/games";
+import logoAsset from "@/assets/shadow-scripts-logo.png";
 
 export const Route = createFileRoute("/")({
   component: Gate,
 });
 
-const STORAGE_KEY = "luaforge.messages.v1";
-const MAX_INPUT_CHARS = 2_000_000; // ~2M chars per message
-const CHUNK_CHARS = 24_000; // split into ~24k-char parts for transport
+const STORAGE_KEY = "shadowscripts.messages.v1";
+const VAULT_KEY = "shadowscripts.unlocked.v1";
+const VAULT_PASSWORD = "Shadow Scripts";
+const GAME_ID_KEY = "shadowscripts.gameId.v1";
+const GAME_CTX_PREFIX = "shadowscripts.gameCtx.v1.";
+const MAX_INPUT_CHARS = 2_000_000;
+const CHUNK_CHARS = 24_000;
 
 function chunkText(text: string, size: number): string[] {
   if (text.length <= size) return [text];
@@ -42,7 +52,6 @@ function chunkText(text: string, size: number): string[] {
   while (i < text.length) {
     let end = Math.min(i + size, text.length);
     if (end < text.length) {
-      // Prefer breaking on whitespace within the last 500 chars of the window
       const slice = text.slice(i, end);
       const nl = slice.lastIndexOf("\n");
       const sp = slice.lastIndexOf(" ");
@@ -54,23 +63,6 @@ function chunkText(text: string, size: number): string[] {
   }
   return chunks;
 }
-
-const VAULT_KEY = "proxyvault.unlocked.v1";
-const VAULT_PASSWORD = "ProxyHub";
-
-const SUGGESTIONS = [
-  "Make a teleport script for a lobby",
-  "Write a leaderstats module with saving",
-  "Add a currency multiplier to a Roblox game",
-  "Build a sword combat system",
-];
-
-const RECENT_STUB = [
-  "Sword combat system",
-  "Teleport script for lobby",
-  "Leaderstats with saving",
-  "Wave-based zombie survival",
-];
 
 function Gate() {
   const [hydrated, setHydrated] = useState(false);
@@ -88,7 +80,7 @@ function Gate() {
   }, []);
 
   if (!hydrated) return <div className="h-screen bg-background" />;
-  if (unlocked) return <LuaForge />;
+  if (unlocked) return <Dashboard />;
 
   const tryUnlock = () => {
     if (password === VAULT_PASSWORD) {
@@ -99,36 +91,24 @@ function Gate() {
       }
       setUnlocked(true);
     } else {
-      setError("❌ Incorrect password.");
+      setError("Incorrect password.");
     }
   };
 
   return (
-    <div
-      style={{
-        background: "#0b0f17",
-        color: "white",
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        fontFamily: "Arial, Helvetica, sans-serif",
-      }}
-    >
-      <div
-        style={{
-          width: 420,
-          maxWidth: "calc(100vw - 32px)",
-          background: "#161b22",
-          border: "1px solid #30363d",
-          borderRadius: 15,
-          padding: 30,
-          textAlign: "center",
-          boxShadow: "0 0 30px rgba(0,255,255,.15)",
-        }}
-      >
-        <h1 style={{ marginBottom: 20, color: "#00eaff" }}>🔒 Proxy Vault</h1>
-        <p>Enter the access key.</p>
+    <div className="flex min-h-screen items-center justify-center bg-[#0b0710] px-4 text-white">
+      <div className="w-full max-w-md rounded-2xl border border-purple-900/40 bg-[#140a1c]/90 p-8 text-center shadow-[0_0_60px_rgba(147,51,234,0.25)] backdrop-blur">
+        <img
+          src={logoAsset}
+          alt="Shadow Scripts"
+          className="mx-auto mb-4 h-24 w-24 object-contain"
+          width={96}
+          height={96}
+        />
+        <h1 className="text-2xl font-bold tracking-tight text-purple-300">
+          Shadow Scripts
+        </h1>
+        <p className="mt-1 text-sm text-purple-200/60">Enter the access key.</p>
         <input
           type="password"
           placeholder="Password"
@@ -138,61 +118,97 @@ function Gate() {
             if (e.key === "Enter") tryUnlock();
           }}
           autoFocus
-          style={{
-            width: "100%",
-            padding: 12,
-            margin: "15px 0",
-            border: "none",
-            borderRadius: 8,
-            background: "#21262d",
-            color: "white",
-            fontSize: 16,
-          }}
+          className="mt-5 w-full rounded-lg border border-purple-900/50 bg-black/40 px-4 py-3 text-sm outline-none placeholder:text-purple-300/30 focus:border-purple-500"
         />
         <button
           onClick={tryUnlock}
-          style={{
-            width: "100%",
-            padding: 12,
-            border: "none",
-            borderRadius: 8,
-            background: "#00bcd4",
-            color: "white",
-            cursor: "pointer",
-            fontSize: 16,
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "#0097a7")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "#00bcd4")}
+          className="mt-3 w-full rounded-lg bg-gradient-to-r from-purple-700 to-purple-500 px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-purple-900/40 transition-opacity hover:opacity-90"
         >
           Unlock
         </button>
-        {error && (
-          <div style={{ color: "#ff5c5c", marginTop: 15 }}>{error}</div>
-        )}
+        {error && <p className="mt-3 text-sm text-red-400">{error}</p>}
       </div>
     </div>
   );
 }
 
-function LuaForge() {
-  const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
+function Dashboard() {
   const [hydrated, setHydrated] = useState(false);
+  const [initialMessages, setInitialMessages] = useState<UIMessage[]>([]);
+  const [gameId, setGameId] = useState<string | null>(null);
+  const [gameCtx, setGameCtx] = useState<GameContext>({});
 
   useEffect(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) setInitialMessages(JSON.parse(raw) as UIMessage[]);
+      const gid = localStorage.getItem(GAME_ID_KEY);
+      if (gid) {
+        setGameId(gid);
+        const ctxRaw = localStorage.getItem(GAME_CTX_PREFIX + gid);
+        if (ctxRaw) setGameCtx(JSON.parse(ctxRaw));
+      }
     } catch {
       /* ignore */
     }
     setHydrated(true);
   }, []);
 
+  const selectGame = (id: string | null) => {
+    setGameId(id);
+    try {
+      if (id) {
+        localStorage.setItem(GAME_ID_KEY, id);
+        const ctxRaw = localStorage.getItem(GAME_CTX_PREFIX + id);
+        setGameCtx(ctxRaw ? JSON.parse(ctxRaw) : {});
+      } else {
+        localStorage.removeItem(GAME_ID_KEY);
+        setGameCtx({});
+      }
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const updateCtx = (id: string, value: string) => {
+    setGameCtx((prev) => {
+      const next = { ...prev, [id]: value };
+      if (gameId) {
+        try {
+          localStorage.setItem(GAME_CTX_PREFIX + gameId, JSON.stringify(next));
+        } catch {
+          /* ignore */
+        }
+      }
+      return next;
+    });
+  };
+
   if (!hydrated) return <div className="h-screen bg-background" />;
-  return <Chat initial={initialMessages} />;
+  return (
+    <Chat
+      initial={initialMessages}
+      gameId={gameId}
+      gameCtx={gameCtx}
+      onSelectGame={selectGame}
+      onUpdateCtx={updateCtx}
+    />
+  );
 }
 
-function Chat({ initial }: { initial: UIMessage[] }) {
+function Chat({
+  initial,
+  gameId,
+  gameCtx,
+  onSelectGame,
+  onUpdateCtx,
+}: {
+  initial: UIMessage[];
+  gameId: string | null;
+  gameCtx: GameContext;
+  onSelectGame: (id: string | null) => void;
+  onUpdateCtx: (id: string, value: string) => void;
+}) {
   const [input, setInput] = useState("");
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [attachError, setAttachError] = useState<string | null>(null);
@@ -200,15 +216,25 @@ function Chat({ initial }: { initial: UIMessage[] }) {
   const [isDragging, setIsDragging] = useState(false);
   const dragDepth = useRef(0);
 
-
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
 
+  const game = findGame(gameId);
+
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: "/api/chat",
+        body: () => ({ gameId, gameContext: gameCtx }),
+      }),
+    [gameId, gameCtx],
+  );
+
   const { messages, sendMessage, status, stop, setMessages } = useChat({
     messages: initial,
-    transport: new DefaultChatTransport({ api: "/api/chat" }),
+    transport,
   });
 
   useEffect(() => {
@@ -231,7 +257,6 @@ function Chat({ initial }: { initial: UIMessage[] }) {
   }, [status]);
 
   const isBusy = status === "submitted" || status === "streaming";
-
   const charCount = input.length;
   const wordCount = input.trim() ? input.trim().split(/\s+/).length : 0;
   const overLimit = charCount > MAX_INPUT_CHARS;
@@ -243,9 +268,6 @@ function Chat({ initial }: { initial: UIMessage[] }) {
     if ((!t && attachments.length === 0) || isBusy) return;
     if (t.length > MAX_INPUT_CHARS) return;
 
-    // Build UIMessage parts: text + one file part per attachment.
-    // For videos we send the extracted preview frame as an image, plus a text
-    // note describing the source clip so the model has explicit context.
     const parts: UIMessage["parts"] = [];
     for (const a of attachments) {
       if (a.kind === "video") {
@@ -269,9 +291,6 @@ function Chat({ initial }: { initial: UIMessage[] }) {
       }
     }
     if (t) {
-      // Chunk very long text into multiple sequential text parts so nothing
-      // is truncated in transit. The server merges consecutive text parts
-      // back into a single message before sending to the model.
       const chunks = chunkText(t, CHUNK_CHARS);
       if (chunks.length === 1) {
         parts.push({ type: "text", text: chunks[0] });
@@ -291,7 +310,6 @@ function Chat({ initial }: { initial: UIMessage[] }) {
     setAttachments([]);
     setAttachError(null);
   };
-
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -385,8 +403,6 @@ function Chat({ initial }: { initial: UIMessage[] }) {
     e.target.value = "";
   };
 
-
-
   const removeAttachment = (i: number) =>
     setAttachments((prev) => prev.filter((_, idx) => idx !== i));
 
@@ -402,38 +418,20 @@ function Chat({ initial }: { initial: UIMessage[] }) {
     textareaRef.current?.focus();
   };
 
+  const placeholder = game
+    ? `Ask about ${game.name}… (Enter to send)`
+    : "Pick a game in the sidebar, then ask anything…";
+
   return (
-    <div className="flex h-screen bg-background text-foreground">
+    <div className="flex h-screen bg-[#0b0710] text-white">
       {/* Sidebar */}
-      <aside className="hidden w-[260px] flex-col border-r border-border bg-sidebar md:flex">
-        <button
-          onClick={newChat}
-          className="mx-3 mt-3 flex items-center gap-2 rounded-lg border border-border bg-transparent px-3 py-2 text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent"
-        >
-          <Plus className="h-4 w-4" />
-          New chat
-        </button>
-        <div className="mt-3 flex-1 overflow-y-auto px-2">
-          <p className="px-3 py-1 text-[11px] uppercase tracking-wider text-muted-foreground">
-            Recent
-          </p>
-          {RECENT_STUB.map((r, i) => (
-            <div
-              key={r}
-              className={`mb-0.5 cursor-pointer truncate rounded-md px-3 py-2 text-[13px] transition-colors ${
-                i === 0
-                  ? "bg-sidebar-accent text-sidebar-foreground"
-                  : "text-muted-foreground hover:bg-sidebar-accent hover:text-sidebar-foreground"
-              }`}
-            >
-              {r}
-            </div>
-          ))}
-        </div>
-        <footer className="border-t border-border px-3 py-3 text-[11px] text-muted-foreground">
-          LuaForge · powered by Lovable AI
-        </footer>
-      </aside>
+      <Sidebar
+        gameId={gameId}
+        gameCtx={gameCtx}
+        onSelectGame={onSelectGame}
+        onUpdateCtx={onUpdateCtx}
+        onNewChat={newChat}
+      />
 
       {/* Main */}
       <main
@@ -444,25 +442,37 @@ function Chat({ initial }: { initial: UIMessage[] }) {
         onDrop={onDrop}
       >
         {isDragging && (
-          <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
-            <div className="rounded-2xl border-2 border-dashed border-primary bg-card/60 px-8 py-6 text-center">
-              <ImageIcon className="mx-auto h-8 w-8 text-primary" />
-              <p className="mt-2 text-sm font-medium">Drop images or videos to attach</p>
-              <p className="text-xs text-muted-foreground">Up to 20 MB each · max 6 files</p>
+          <div className="pointer-events-none absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+            <div className="rounded-2xl border-2 border-dashed border-purple-500 bg-purple-950/40 px-8 py-6 text-center">
+              <ImageIcon className="mx-auto h-8 w-8 text-purple-300" />
+              <p className="mt-2 text-sm font-medium">
+                Drop images or videos to attach
+              </p>
+              <p className="text-xs text-purple-200/60">
+                Up to 20 MB each · max 6 files
+              </p>
             </div>
           </div>
         )}
 
-        <header className="flex h-12 items-center gap-2 border-b border-border px-4">
-          <ForgeLogo className="h-5 w-5 text-primary" />
-          <span className="font-semibold">LuaForge</span>
-          <span className="text-xs text-muted-foreground">Roblox Luau AI</span>
+        <header className="flex h-12 items-center gap-2 border-b border-purple-900/30 bg-black/30 px-4">
+          <img
+            src={logoAsset}
+            alt="Shadow Scripts"
+            className="h-6 w-6 object-contain"
+            width={24}
+            height={24}
+          />
+          <span className="font-semibold tracking-tight">Shadow Scripts</span>
+          <span className="text-xs text-purple-300/60">
+            {game ? `· ${game.name}` : "· pick a game"}
+          </span>
         </header>
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto">
           <div className="mx-auto max-w-3xl px-4 py-6">
             {messages.length === 0 ? (
-              <EmptyState onPick={submit} />
+              <EmptyState game={game} onPick={submit} />
             ) : (
               <div className="space-y-6">
                 {messages.map((m) => (
@@ -474,12 +484,22 @@ function Chat({ initial }: { initial: UIMessage[] }) {
           </div>
         </div>
 
-        <div className="border-t border-border p-4">
+        <div className="border-t border-purple-900/30 bg-black/20 p-4">
           <form onSubmit={onSubmit} className="mx-auto max-w-3xl">
-            <div className="mb-2 flex items-center gap-2 rounded-xl border border-border bg-card/30 px-3 py-2 text-xs text-muted-foreground">
+            <div className="mb-2 flex items-center gap-2 rounded-xl border border-purple-900/40 bg-black/30 px-3 py-2 text-xs text-purple-200/70">
               <SlidersHorizontal className="h-3.5 w-3.5" />
-              <span>Gameplay constraints</span>
-              <span className="ml-auto text-[10px] opacity-60">optional</span>
+              <span>
+                {game
+                  ? `Context: ${game.name}${
+                      Object.values(gameCtx).some((v) => v?.trim())
+                        ? ` (${Object.values(gameCtx).filter((v) => v?.trim()).length} field(s))`
+                        : ""
+                    }`
+                  : "No game selected"}
+              </span>
+              <span className="ml-auto text-[10px] opacity-60">
+                Configure in sidebar
+              </span>
             </div>
 
             {(attachments.length > 0 || attachError) && (
@@ -496,38 +516,39 @@ function Chat({ initial }: { initial: UIMessage[] }) {
                   </div>
                 )}
                 {attachError && (
-                  <p className="text-xs text-destructive">{attachError}</p>
+                  <p className="text-xs text-red-400">{attachError}</p>
                 )}
               </div>
             )}
 
-            <div className="rounded-2xl border border-border bg-card p-2 shadow-lg">
+            <div className="rounded-2xl border border-purple-900/40 bg-black/40 p-2 shadow-lg shadow-purple-950/30">
               <textarea
                 ref={textareaRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={onKey}
-                placeholder="Message LuaForge… (Enter to send, Shift+Enter for newline)"
+                placeholder={placeholder}
                 rows={4}
                 maxLength={MAX_INPUT_CHARS}
-                className="max-h-[60vh] min-h-[80px] w-full resize-y bg-transparent px-2 py-2 text-sm outline-none placeholder:text-muted-foreground"
+                className="max-h-[60vh] min-h-[80px] w-full resize-y bg-transparent px-2 py-2 text-sm outline-none placeholder:text-purple-200/30"
                 autoFocus
               />
-              <div className="flex items-center justify-between px-2 pb-1 text-[11px] text-muted-foreground">
+              <div className="flex items-center justify-between px-2 pb-1 text-[11px] text-purple-200/50">
                 <span>
                   {wordCount.toLocaleString()} words ·{" "}
-                  <span className={overLimit ? "text-destructive font-medium" : ""}>
+                  <span
+                    className={overLimit ? "font-medium text-red-400" : ""}
+                  >
                     {charCount.toLocaleString()}
                   </span>{" "}
                   / {MAX_INPUT_CHARS.toLocaleString()} chars
                 </span>
                 <span>
                   {willChunk
-                    ? `Will send in ${chunkCount} chunks (~${CHUNK_CHARS.toLocaleString()} each)`
+                    ? `Sends in ${chunkCount} chunks`
                     : `Chunks at ${CHUNK_CHARS.toLocaleString()} chars`}
                 </span>
               </div>
-
               <div className="flex items-center gap-1 px-1 pt-1">
                 <input
                   ref={imageInputRef}
@@ -561,7 +582,7 @@ function Chat({ initial }: { initial: UIMessage[] }) {
                   <Monitor className="h-4 w-4" />
                 </IconBtn>
                 {processing && (
-                  <span className="ml-1 inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                  <span className="ml-1 inline-flex items-center gap-1 text-[11px] text-purple-200/60">
                     <Loader2 className="h-3 w-3 animate-spin" />
                     Processing…
                   </span>
@@ -570,7 +591,7 @@ function Chat({ initial }: { initial: UIMessage[] }) {
                   <button
                     type="button"
                     onClick={() => stop()}
-                    className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-foreground px-3 py-1.5 text-sm font-medium text-background transition-opacity hover:opacity-90"
+                    className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-purple-500 px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90"
                   >
                     <Square className="h-3.5 w-3.5 fill-current" />
                     Stop
@@ -578,17 +599,18 @@ function Chat({ initial }: { initial: UIMessage[] }) {
                 ) : (
                   <button
                     type="submit"
-                    disabled={(!input.trim() && attachments.length === 0) || overLimit}
-                    className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-foreground px-3 py-1.5 text-sm font-medium text-background transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
+                    disabled={
+                      (!input.trim() && attachments.length === 0) || overLimit
+                    }
+                    className="ml-auto inline-flex items-center gap-1.5 rounded-lg bg-gradient-to-r from-purple-700 to-purple-500 px-3 py-1.5 text-sm font-medium text-white transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     <Send className="h-3.5 w-3.5" />
                   </button>
-
                 )}
               </div>
             </div>
-            <p className="mt-2 text-center text-[11px] text-muted-foreground/70">
-              LuaForge can make mistakes. Verify generated scripts before running.
+            <p className="mt-2 text-center text-[11px] text-purple-200/40">
+              Shadow Scripts can make mistakes. Verify anything before running it in-game.
             </p>
           </form>
         </div>
@@ -597,22 +619,274 @@ function Chat({ initial }: { initial: UIMessage[] }) {
   );
 }
 
-function EmptyState({ onPick }: { onPick: (t: string) => void }) {
+function Sidebar({
+  gameId,
+  gameCtx,
+  onSelectGame,
+  onUpdateCtx,
+  onNewChat,
+}: {
+  gameId: string | null;
+  gameCtx: GameContext;
+  onSelectGame: (id: string | null) => void;
+  onUpdateCtx: (id: string, value: string) => void;
+  onNewChat: () => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const game = findGame(gameId);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return GAMES;
+    return GAMES.filter((g) => g.name.toLowerCase().includes(q));
+  }, [query]);
+
   return (
-    <div className="flex flex-col items-center py-20 text-center">
-      <ForgeLogo className="h-14 w-14 text-primary" />
-      <h1 className="mt-3 text-2xl font-semibold">
-        What Luau script are we building?
+    <aside className="hidden w-[320px] shrink-0 flex-col border-r border-purple-900/30 bg-[#0a0510] md:flex">
+      <div className="flex items-center gap-2 border-b border-purple-900/30 px-4 py-3">
+        <img
+          src={logoAsset}
+          alt=""
+          className="h-8 w-8 object-contain"
+          width={32}
+          height={32}
+        />
+        <div className="min-w-0">
+          <div className="truncate text-sm font-semibold tracking-tight">
+            Shadow Scripts
+          </div>
+          <div className="text-[10px] uppercase tracking-widest text-purple-300/50">
+            AI Dashboard
+          </div>
+        </div>
+      </div>
+
+      <button
+        onClick={onNewChat}
+        className="mx-3 mt-3 flex items-center gap-2 rounded-lg border border-purple-900/40 bg-black/30 px-3 py-2 text-sm text-purple-100 transition-colors hover:bg-purple-950/40"
+      >
+        <Plus className="h-4 w-4" />
+        New chat
+      </button>
+
+      <div className="mt-4 px-3">
+        <div className="mb-1 flex items-center gap-1.5 px-1 text-[11px] font-medium uppercase tracking-wider text-purple-300/60">
+          <Gamepad2 className="h-3 w-3" />
+          Game
+        </div>
+        <button
+          type="button"
+          onClick={() => setDropdownOpen((v) => !v)}
+          className="flex w-full items-center justify-between rounded-lg border border-purple-900/40 bg-black/40 px-3 py-2 text-sm text-purple-100 transition-colors hover:bg-purple-950/40"
+        >
+          <span className="truncate">{game ? game.name : "Select a game"}</span>
+          <ChevronDown
+            className={`h-4 w-4 shrink-0 transition-transform ${dropdownOpen ? "rotate-180" : ""}`}
+          />
+        </button>
+        {dropdownOpen && (
+          <div className="mt-2 rounded-lg border border-purple-900/40 bg-black/60 p-2">
+            <div className="mb-2 flex items-center gap-2 rounded-md border border-purple-900/40 bg-black/40 px-2 py-1.5">
+              <Search className="h-3.5 w-3.5 text-purple-300/50" />
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search games…"
+                className="w-full bg-transparent text-xs outline-none placeholder:text-purple-200/30"
+              />
+            </div>
+            <div className="max-h-64 overflow-y-auto">
+              {filtered.length === 0 ? (
+                <p className="p-2 text-xs text-purple-200/40">No matches</p>
+              ) : (
+                filtered.map((g) => (
+                  <button
+                    key={g.id}
+                    onClick={() => {
+                      onSelectGame(g.id);
+                      setDropdownOpen(false);
+                      setQuery("");
+                    }}
+                    className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs transition-colors ${
+                      gameId === g.id
+                        ? "bg-purple-900/40 text-white"
+                        : "text-purple-100/80 hover:bg-purple-950/40"
+                    }`}
+                  >
+                    <span className="truncate">{g.name}</span>
+                    {g.languages[0] && (
+                      <span className="ml-2 shrink-0 text-[10px] text-purple-300/50">
+                        {g.languages[0]}
+                      </span>
+                    )}
+                  </button>
+                ))
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-3 flex-1 overflow-y-auto px-3 pb-4">
+        {game ? (
+          <GamePanel
+            game={game}
+            context={gameCtx}
+            onChange={onUpdateCtx}
+          />
+        ) : (
+          <div className="mt-4 rounded-lg border border-dashed border-purple-900/40 bg-black/20 p-4 text-xs text-purple-200/50">
+            Pick a game above and Shadow Scripts will tailor answers to its
+            engine, language, and your play style.
+          </div>
+        )}
+      </div>
+
+      <footer className="border-t border-purple-900/30 px-3 py-3 text-[11px] text-purple-200/40">
+        Shadow Scripts · powered by Lovable AI
+      </footer>
+    </aside>
+  );
+}
+
+function GamePanel({
+  game,
+  context,
+  onChange,
+}: {
+  game: GameDefinition;
+  context: GameContext;
+  onChange: (id: string, value: string) => void;
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="rounded-lg border border-purple-900/40 bg-black/30 p-3 text-xs">
+        <div className="text-sm font-semibold text-purple-100">{game.name}</div>
+        <div className="mt-2 space-y-1 text-purple-200/70">
+          {game.engine !== "—" && (
+            <MetaRow k="Engine" v={game.engine} />
+          )}
+          {game.languages.length > 0 && (
+            <MetaRow k="Language" v={game.languages.join(", ")} />
+          )}
+          {game.framework !== "—" && (
+            <MetaRow k="Framework" v={game.framework} />
+          )}
+          {game.fileTypes.length > 0 && (
+            <MetaRow k="Files" v={game.fileTypes.join(" ")} mono />
+          )}
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-purple-900/40 bg-black/30 p-3">
+        <div className="mb-2 text-[11px] font-medium uppercase tracking-wider text-purple-300/60">
+          Context
+        </div>
+        <div className="space-y-2.5">
+          {game.fields.map((f) => {
+            const value = context[f.id] ?? "";
+            const common =
+              "w-full rounded-md border border-purple-900/40 bg-black/40 px-2 py-1.5 text-xs outline-none placeholder:text-purple-200/30 focus:border-purple-500";
+            return (
+              <label key={f.id} className="block">
+                <span className="mb-1 block text-[10px] font-medium uppercase tracking-wider text-purple-300/50">
+                  {f.label}
+                </span>
+                {f.kind === "textarea" ? (
+                  <textarea
+                    value={value}
+                    onChange={(e) => onChange(f.id, e.target.value)}
+                    placeholder={f.placeholder}
+                    rows={3}
+                    className={`${common} resize-y`}
+                  />
+                ) : f.kind === "select" ? (
+                  <select
+                    value={value}
+                    onChange={(e) => onChange(f.id, e.target.value)}
+                    className={common}
+                  >
+                    <option value="">—</option>
+                    {f.options?.map((o) => (
+                      <option key={o} value={o}>
+                        {o}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <input
+                    type="text"
+                    value={value}
+                    onChange={(e) => onChange(f.id, e.target.value)}
+                    placeholder={f.placeholder}
+                    className={common}
+                  />
+                )}
+              </label>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MetaRow({ k, v, mono }: { k: string; v: string; mono?: boolean }) {
+  return (
+    <div className="flex items-baseline gap-2">
+      <span className="w-16 shrink-0 text-[10px] uppercase tracking-wider text-purple-300/50">
+        {k}
+      </span>
+      <span
+        className={`min-w-0 flex-1 break-words ${mono ? "font-mono text-[10.5px]" : ""}`}
+      >
+        {v}
+      </span>
+    </div>
+  );
+}
+
+function EmptyState({
+  game,
+  onPick,
+}: {
+  game: GameDefinition | undefined;
+  onPick: (t: string) => void;
+}) {
+  const suggestions = game
+    ? suggestionsForGame(game)
+    : [
+        "What game do you want help with?",
+        "Recommend me a game to play tonight",
+        "Explain the differences between Source 2 and Unreal 5",
+        "What's the best language for game scripting in 2026?",
+      ];
+
+  return (
+    <div className="flex flex-col items-center py-16 text-center">
+      <img
+        src={logoAsset}
+        alt="Shadow Scripts"
+        className="h-24 w-24 object-contain drop-shadow-[0_0_30px_rgba(147,51,234,0.4)]"
+        width={96}
+        height={96}
+      />
+      <h1 className="mt-4 text-2xl font-bold tracking-tight">
+        {game ? `Shadow Scripts · ${game.name}` : "Shadow Scripts"}
       </h1>
-      <p className="mt-2 max-w-md text-sm text-muted-foreground">
-        Ask anything, paste a Roblox game link, or drop in a screenshot or short clip.
+      <p className="mt-2 max-w-md text-sm text-purple-200/60">
+        {game
+          ? `Ask anything about ${game.name} — tactics, builds, mechanics, or scripting${game.languages.length ? ` in ${game.languages[0]}` : ""}.`
+          : "Your AI companion across dozens of games. Pick one in the sidebar to sharpen the answers."}
       </p>
       <div className="mt-8 grid w-full max-w-xl grid-cols-1 gap-2 sm:grid-cols-2">
-        {SUGGESTIONS.map((s) => (
+        {suggestions.map((s) => (
           <button
             key={s}
             onClick={() => onPick(s)}
-            className="rounded-xl border border-border bg-card/40 px-3 py-3 text-left text-sm text-foreground/90 transition-colors hover:bg-accent"
+            className="rounded-xl border border-purple-900/40 bg-black/30 px-3 py-3 text-left text-sm text-purple-100/90 transition-colors hover:border-purple-700/60 hover:bg-purple-950/40"
           >
             {s}
           </button>
@@ -620,6 +894,46 @@ function EmptyState({ onPick }: { onPick: (t: string) => void }) {
       </div>
     </div>
   );
+}
+
+function suggestionsForGame(g: GameDefinition): string[] {
+  switch (g.id) {
+    case "cs2":
+      return [
+        "Best smoke lineups for A site on Mirage as T",
+        "How do I improve my crosshair placement?",
+        "Explain the CT default on Inferno",
+        "Give me a warmup routine to hit Premier 15k",
+      ];
+    case "roblox":
+      return [
+        "Write a leaderstats module with DataStore saving",
+        "Build a sword combat system",
+        "Explain FilteringEnabled and RemoteEvents",
+        "Make a round-based lobby teleport script",
+      ];
+    case "fivem":
+      return [
+        "QBCore resource that adds a fishing job",
+        "How do I use fxmanifest.lua correctly?",
+        "NUI callback example with client/server flow",
+        "Explain event security in FiveM",
+      ];
+    case "minecraft":
+      return [
+        "Fabric mod that adds a new sword",
+        "Datapack recipe for a custom crafting result",
+        "Bedrock Add-on that spawns a custom entity",
+        "Optimize a redstone farm",
+      ];
+    default:
+      return [
+        `What are the fundamentals of ${g.name}?`,
+        `Give me a training plan for ${g.name}`,
+        `What are common mistakes in ${g.name}?`,
+        `Suggest 5 things to try next in ${g.name}`,
+      ];
+  }
 }
 
 function AttachmentChip({
@@ -630,14 +944,14 @@ function AttachmentChip({
   onRemove: () => void;
 }) {
   return (
-    <div className="group relative overflow-hidden rounded-lg border border-border bg-card">
+    <div className="group relative overflow-hidden rounded-lg border border-purple-900/40 bg-black/40">
       <img
         src={attachment.dataUrl}
         alt={attachment.name}
         className="h-16 w-24 object-cover"
       />
       {attachment.kind === "video" && (
-        <div className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/60 px-1.5 py-0.5 text-[10px] text-white">
+        <div className="absolute bottom-1 left-1 flex items-center gap-1 rounded bg-black/70 px-1.5 py-0.5 text-[10px] text-white">
           <Film className="h-2.5 w-2.5" />
           {attachment.durationSec}s
         </div>
@@ -676,13 +990,13 @@ function MessageBubble({ message }: { message: UIMessage }) {
                   key={i}
                   src={p.url}
                   alt={p.filename ?? "attachment"}
-                  className="max-h-40 rounded-lg border border-border object-cover"
+                  className="max-h-40 rounded-lg border border-purple-900/40 object-cover"
                 />
               ))}
             </div>
           )}
           {text && (
-            <div className="whitespace-pre-wrap rounded-2xl bg-primary px-4 py-2.5 text-sm text-primary-foreground">
+            <div className="whitespace-pre-wrap rounded-2xl bg-gradient-to-br from-purple-700 to-purple-500 px-4 py-2.5 text-sm text-white">
               {text}
             </div>
           )}
@@ -693,9 +1007,13 @@ function MessageBubble({ message }: { message: UIMessage }) {
 
   return (
     <div className="flex gap-3">
-      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary">
-        <ForgeLogo className="h-4 w-4" />
-      </div>
+      <img
+        src={logoAsset}
+        alt=""
+        className="mt-0.5 h-7 w-7 shrink-0 object-contain"
+        width={28}
+        height={28}
+      />
       <div className="min-w-0 flex-1 text-sm leading-relaxed">
         <FormattedText text={text} />
       </div>
@@ -706,13 +1024,17 @@ function MessageBubble({ message }: { message: UIMessage }) {
 function ThinkingBubble() {
   return (
     <div className="flex gap-3">
-      <div className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/15 text-primary">
-        <ForgeLogo className="h-4 w-4" />
-      </div>
+      <img
+        src={logoAsset}
+        alt=""
+        className="mt-0.5 h-7 w-7 shrink-0 object-contain opacity-70"
+        width={28}
+        height={28}
+      />
       <div className="flex items-center gap-1.5 pt-1.5">
-        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground" />
-        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground [animation-delay:150ms]" />
-        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-muted-foreground [animation-delay:300ms]" />
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-purple-400" />
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-purple-400 [animation-delay:150ms]" />
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-purple-400 [animation-delay:300ms]" />
       </div>
     </div>
   );
@@ -725,11 +1047,9 @@ function FormattedText({ text }: { text: string }) {
       {parts.map((part, i) => {
         if (part.startsWith("```")) {
           const inner = part.replace(/^```(\w+)?\n?/, "").replace(/```$/, "");
-          const lang = /^```(\w+)/.exec(part)?.[1] ?? "lua";
+          const lang = /^```(\w+)/.exec(part)?.[1] ?? "text";
           const isLua = /^(lua|luau)$/i.test(lang);
-          return (
-            <CodeBlock key={i} code={inner} lang={lang} runnable={isLua} />
-          );
+          return <CodeBlock key={i} code={inner} lang={lang} runnable={isLua} />;
         }
         return (
           <p key={i} className="whitespace-pre-wrap">
@@ -764,7 +1084,6 @@ function CodeBlock({
       lualib.luaL_openlibs(L);
 
       const buf: string[] = [];
-      // Override print
       lua.lua_pushcfunction(L, (LL: any) => {
         const n = lua.lua_gettop(LL);
         const line: string[] = [];
@@ -778,7 +1097,6 @@ function CodeBlock({
       });
       lua.lua_setglobal(L, to_luastring("print"));
 
-      // Stub game/workspace/wait so simple Roblox snippets don't error immediately
       const stub = `
         wait = wait or function(t) return t or 0 end
         task = task or { wait = function(t) return t or 0 end, spawn = function(f, ...) return f(...) end, delay = function(_, f, ...) return f(...) end }
@@ -804,9 +1122,9 @@ function CodeBlock({
   };
 
   return (
-    <div className="overflow-hidden rounded-lg border border-border bg-black/40">
-      <div className="flex items-center justify-between border-b border-border/50 px-3 py-1.5">
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
+    <div className="overflow-hidden rounded-lg border border-purple-900/40 bg-black/60">
+      <div className="flex items-center justify-between border-b border-purple-900/40 px-3 py-1.5">
+        <span className="text-[10px] uppercase tracking-wider text-purple-300/60">
           {lang}
         </span>
         {runnable && (
@@ -814,7 +1132,7 @@ function CodeBlock({
             type="button"
             onClick={run}
             disabled={running}
-            className="inline-flex items-center gap-1 rounded-md bg-primary/90 px-2 py-0.5 text-[11px] font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+            className="inline-flex items-center gap-1 rounded-md bg-purple-600 px-2 py-0.5 text-[11px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
           >
             {running ? (
               <Loader2 className="h-3 w-3 animate-spin" />
@@ -826,15 +1144,15 @@ function CodeBlock({
         )}
       </div>
       <pre className="overflow-x-auto p-3 text-[12.5px] leading-relaxed">
-        <code className="font-mono text-foreground/90">{code}</code>
+        <code className="font-mono text-purple-50/90">{code}</code>
       </pre>
       {output !== null && (
         <div
-          className={`border-t border-border/50 px-3 py-2 text-[12px] ${
+          className={`border-t border-purple-900/40 px-3 py-2 text-[12px] ${
             ok ? "text-emerald-300" : "text-red-300"
           }`}
         >
-          <div className="mb-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+          <div className="mb-1 text-[10px] uppercase tracking-wider text-purple-300/60">
             {ok ? "Output" : "Error"}
           </div>
           <pre className="whitespace-pre-wrap font-mono">{output}</pre>
@@ -858,29 +1176,9 @@ function IconBtn({
       type="button"
       title={title}
       onClick={onClick}
-      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-purple-200/70 transition-colors hover:bg-purple-950/40 hover:text-white"
     >
       {children}
     </button>
-  );
-}
-
-function ForgeLogo({ className = "" }: { className?: string }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={1.8}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      className={className}
-    >
-      <path d="M4 4h6v6H4z" />
-      <path d="M14 4h6v6h-6z" opacity=".55" />
-      <path d="M4 14h6v6H4z" opacity=".55" />
-      <path d="M14 14h6v6h-6z" />
-      <path d="M10 10l4 4" />
-    </svg>
   );
 }
