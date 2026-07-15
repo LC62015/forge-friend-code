@@ -1,29 +1,33 @@
 import { createLovableAiGatewayProvider } from "@/lib/ai-gateway.server";
 import { createFileRoute } from "@tanstack/react-router";
 import { convertToModelMessages, streamText, type UIMessage } from "ai";
+import { findGame, buildGameContextBlock, type GameContext } from "@/lib/games";
 
-const SYSTEM_PROMPT = `You are LuaForge, an expert Roblox Luau scripting assistant.
+const BASE_SYSTEM_PROMPT = `You are Shadow Scripts, a versatile AI assistant that helps players, modders, and developers with the game they are working on right now.
 
-You help developers build games on Roblox using Luau. You:
-- Write clean, well-commented Luau code following Roblox best practices
-- Explain where each script goes (ServerScriptService, StarterPlayerScripts, ReplicatedStorage, etc.)
-- Use modern Roblox APIs (TweenService, RemoteEvents, Attributes, DataStoreService, etc.)
-- Prefer modules and clean architecture over monolithic scripts
-- Warn about common pitfalls (FilteringEnabled, exploiter surface, DataStore quotas)
-- Format code in \`\`\`lua fenced blocks
+You:
+- Give tactical, mechanical, and progression advice for the selected game
+- When the game supports modding/scripting, write clean, well-commented code in that game's language and stack
+- Cite the correct engine APIs, file layout, and load points
+- Format code in triple-backtick fenced blocks using the correct language tag
+- Warn about common pitfalls (exploiter surface, TOS-safe scope, performance)
+- Refuse to build cheats, injectors, aimbots, ESP/wallhacks, or anything designed to bypass anti-cheat or grant unfair multiplayer advantages
 
-When the user attaches an image, describe what you see (UI, error, screenshot) and produce Luau
-that fits. When the user attaches a video, they've sent you the first frame plus a text note with
-the filename and duration — use the frame as visual context and ask targeted follow-up questions
-about the parts of the clip you cannot see.`;
+When the user attaches an image, describe what you see (UI, error, screenshot, map) and answer based on it.
+When the user attaches a video, they have sent the first frame plus a text note with the filename and duration — use the frame as visual context and ask targeted follow-up questions about the parts you cannot see.`;
 
-type ChatRequestBody = { messages?: unknown };
+type ChatRequestBody = {
+  messages?: unknown;
+  gameId?: string;
+  gameContext?: GameContext;
+};
 
 export const Route = createFileRoute("/api/chat")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const { messages } = (await request.json()) as ChatRequestBody;
+        const body = (await request.json()) as ChatRequestBody;
+        const { messages, gameId, gameContext } = body;
         if (!Array.isArray(messages)) {
           return new Response("Messages are required", { status: 400 });
         }
@@ -42,7 +46,7 @@ export const Route = createFileRoute("/api/chat")({
           for (const p of m.parts) {
             if (p.type === "text") {
               const cleaned = p.text.replace(/^\[chunk \d+\/\d+\]\n?/, "");
-              buf += (buf ? "" : "") + cleaned;
+              buf += cleaned;
             } else {
               flush();
               out.push(p);
@@ -55,13 +59,17 @@ export const Route = createFileRoute("/api/chat")({
         const key = process.env.LOVABLE_API_KEY;
         if (!key) return new Response("Missing LOVABLE_API_KEY", { status: 500 });
 
+        const game = findGame(gameId);
+        const system = game
+          ? `${BASE_SYSTEM_PROMPT}\n\n=== ACTIVE GAME CONTEXT ===\n${buildGameContextBlock(game, gameContext ?? {})}`
+          : `${BASE_SYSTEM_PROMPT}\n\nNo game is currently selected. Ask the user which game they need help with before writing code specific to an engine.`;
+
         const gateway = createLovableAiGatewayProvider(key);
         const result = streamText({
           model: gateway("google/gemini-3-flash-preview"),
-          system: SYSTEM_PROMPT,
+          system,
           messages: await convertToModelMessages(merged),
         });
-
 
         return result.toUIMessageStreamResponse({
           originalMessages: messages as UIMessage[],
