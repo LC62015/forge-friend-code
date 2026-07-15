@@ -80,18 +80,19 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "Shadow Scripts — AI game & modding assistant" },
       { name: "description", content: "Shadow Scripts is a dark, focused AI dashboard for gamers, modders, and game devs across 30+ titles including CS2, Roblox, FiveM, Minecraft, and more." },
       { property: "og:title", content: "Shadow Scripts — AI game & modding assistant" },
-      { property: "og:description", content: "AI companion for competitive play and game scripting across dozens of games." },
+      { property: "og:description", content: "Shadow Scripts is a dark, focused AI dashboard for gamers, modders, and game devs across 30+ titles including CS2, Roblox, FiveM, Minecraft, and more." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:title", content: "Shadow Scripts — AI game & modding assistant" },
-      { name: "twitter:description", content: "AI companion for competitive play and game scripting across dozens of games." },
+      { name: "twitter:description", content: "Shadow Scripts is a dark, focused AI dashboard for gamers, modders, and game devs across 30+ titles including CS2, Roblox, FiveM, Minecraft, and more." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/59e71272-c6a1-4ca7-82e6-b3a0028417de/id-preview-4cab735a--507eacf4-2017-40dc-99df-489e17fd55cc.lovable.app-1784153211951.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/59e71272-c6a1-4ca7-82e6-b3a0028417de/id-preview-4cab735a--507eacf4-2017-40dc-99df-489e17fd55cc.lovable.app-1784153211951.png" },
     ],
     links: [
       {
         rel: "stylesheet",
         href: appCss,
       },
-      { rel: "icon", type: "image/png", href: "/favicon.png" },
     ],
 
   }),
